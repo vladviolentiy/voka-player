@@ -131,7 +131,7 @@ func playPlaylist(w http.ResponseWriter, r *http.Request, maxQuality bool) {
 		quality = strconv.Itoa(matchCount)
 	}
 
-	linkBuilder.WriteString(channelBasicId + "-inadv-qidx-" + quality + "k_v5.m3u8")
+	linkBuilder.WriteString(channelBasicId + "-inadv-qidx-" + quality + "k_v3.m3u8")
 	body := executeGet(linkBuilder.String())
 
 	_, writeError := w.Write(body)
