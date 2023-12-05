@@ -12,7 +12,14 @@ var endpoint = "https://api.voka.tv/v1/"
 var accessToken = ""
 
 func executeGet(url string) []byte {
-	response, err := http.Get(url)
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Println("error to prepare get query", err)
+		return nil
+	}
+	request.Header.Set("X-Forwarded-For", "37.215.1.1")
+	client := http.Client{}
+	response, err := client.Do(request)
 	if err != nil {
 		log.Println("error to execute Get query. ", err)
 		return nil
