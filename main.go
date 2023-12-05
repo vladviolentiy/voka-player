@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type streamJsonInterface struct {
@@ -30,6 +31,7 @@ type downloadPlaylistInterface struct {
 var api = Apicall{}
 
 var hashList = make(map[string]string)
+var timeOutList = make(map[string]int32)
 
 func main() {
 	rtr := mux.NewRouter()
@@ -77,6 +79,9 @@ func playPlaylist(w http.ResponseWriter, r *http.Request, maxQuality bool) {
 	params := mux.Vars(r)
 	channelId := params["channelId"]
 	quality := params["quality"]
+	if timeOutList[channelId] < int32(time.Now().Unix()) {
+		delete(hashList, channelId)
+	}
 	var linkUrl string
 	if val, ok := hashList[channelId]; ok {
 		log.Println("Hash code isset in cache, get info from cache")
@@ -96,6 +101,7 @@ func playPlaylist(w http.ResponseWriter, r *http.Request, maxQuality bool) {
 		}
 		linkUrl = streamJsonResponse.Data.Url
 		hashList[channelId] = linkUrl
+		timeOutList[channelId] = int32(time.Now().Unix()) + 3600*3
 	}
 	var linkSplited = strings.Split(linkUrl, "/")
 	var linkBuilder strings.Builder
