@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -8,7 +11,7 @@ import (
 
 type Apicall struct{}
 
-var endpoint = "https://api.voka.tv/v1/"
+var endpoint = "https://api.voka.tv/"
 var accessToken = ""
 
 func executeGet(url string) []byte {
@@ -18,10 +21,45 @@ func executeGet(url string) []byte {
 		return nil
 	}
 	request.Header.Set("X-Forwarded-For", "37.215.1.1")
+	request.Header.Set("User-Agent", "Voka-player")
 	client := http.Client{}
 	response, err := client.Do(request)
 	if err != nil {
-		log.Println("error to execute Get query. ", err)
+		log.Println("error to execute get query. ", err)
+		return nil
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			return
+		}
+	}(response.Body)
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil
+	}
+	return body
+}
+
+func executePost(url string, params interface{}) []byte {
+	decodedData, err := json.Marshal(params)
+	if err != nil {
+		fmt.Println("decodedData convert error:", err)
+		return nil
+	}
+	request, err := http.NewRequest("POST", endpoint+url, bytes.NewBuffer(decodedData))
+	if err != nil {
+		log.Println("error to prepare post query", err)
+		return nil
+	}
+	request.Header.Set("Content-Type", "application/json; charset=utf-8")
+	request.Header.Set("X-Forwarded-For", "37.215.1.1")
+	request.Header.Set("User-Agent", "Voka-player")
+	client := http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		log.Println("error to execute post query. ", err)
 		return nil
 	}
 	defer func(Body io.ReadCloser) {
@@ -39,7 +77,21 @@ func executeGet(url string) []byte {
 }
 
 func executeEndpoint(call string) []byte {
-	return executeGet(endpoint + call)
+	return executeGet(endpoint + "v1/" + call)
+}
+
+func (a Apicall) auth(params struct {
+	ClientId     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	GrantType    string `json:"grant_type"`
+	Password     string `json:"password"`
+	Username     string `json:"username"`
+}) []byte {
+	return executePost("oauth/token?client_id=3e28685c-fce0-4994-9d3a-1dad2776e16a&client_version=4.2.0.160&locale=ru-RU&timezone=0", params)
+}
+
+func (a Apicall) setAccessToken(token string) {
+	accessToken = token
 }
 
 func (a Apicall) downloadPlaylist() []byte {
