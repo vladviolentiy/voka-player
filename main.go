@@ -16,6 +16,9 @@ import (
 )
 
 type streamJsonInterface struct {
+	Errors []struct {
+		Code string `json:"code"`
+	} `json:"errors"`
 	Data struct {
 		Url string `json:"url"`
 	} `json:"data"`
@@ -66,6 +69,16 @@ func main() {
 	}
 }
 
+func writeConfigInFile(accessToken string) {
+	jsonString, _ := json.Marshal(AccessTokenCache{
+		AccessToken: accessToken,
+	})
+	err := os.WriteFile("cache.json", jsonString, 0644)
+	if err != nil {
+		return
+	}
+}
+
 func checkIssetCurrentToken() {
 	if _, err := os.Stat("cache.json"); err == nil {
 		fmt.Println("File isset. Load Token From File")
@@ -83,7 +96,11 @@ func checkIssetCurrentToken() {
 		if err != nil {
 			fmt.Println("error: ", err)
 		}
-
+		if accessTokenCache.AccessToken == "" {
+			log.Println("Access token is empty. trying to get fresh token")
+			getWriteAndSetAccessToken()
+			return
+		}
 		if configuration.Login == "" {
 			fmt.Println("Login is empty")
 			return
@@ -91,18 +108,16 @@ func checkIssetCurrentToken() {
 		api.setAccessToken(accessTokenCache.AccessToken)
 	} else if os.IsNotExist(err) {
 		fmt.Println("Cache file not exists. Creating")
-
-		jsonString, _ := json.Marshal(AccessTokenCache{
-			AccessToken: getFreshToken(),
-		})
-		err := os.WriteFile("cache.json", jsonString, 0644)
-		if err != nil {
-			return
-		}
+		getWriteAndSetAccessToken()
 	} else {
 		fmt.Println("error: ", err)
 	}
+}
 
+func getWriteAndSetAccessToken() {
+	var token = getFreshToken()
+	writeConfigInFile(token)
+	api.setAccessToken(token)
 }
 
 func readConfigFile() {
@@ -159,6 +174,21 @@ func playPlaylistMax(w http.ResponseWriter, r *http.Request) {
 	playPlaylist(w, r, true)
 }
 
+func getStreamAndErrorHandler(channelId string, w http.ResponseWriter) streamJsonInterface {
+	body := api.getStream(channelId)
+	var streamJsonResponse streamJsonInterface
+	var err = json.Unmarshal(body, &streamJsonResponse)
+	if err != nil {
+		log.Print(err)
+		_, err := w.Write([]byte("Error JSON parsing"))
+		if err != nil {
+			panic("Error send  query")
+		}
+		panic("Error execute query")
+	}
+	return streamJsonResponse
+}
+
 func playPlaylist(w http.ResponseWriter, r *http.Request, maxQuality bool) {
 	w.Header().Add("Content-Type", "application/vnd.apple.mpegurl")
 	params := mux.Vars(r)
@@ -173,15 +203,12 @@ func playPlaylist(w http.ResponseWriter, r *http.Request, maxQuality bool) {
 		linkUrl = val
 	} else {
 		log.Println("Hash code not isset in cache, Downloading, parsing, put in cache")
-		body := api.getStream(channelId)
-		var streamJsonResponse streamJsonInterface
-		var err = json.Unmarshal(body, &streamJsonResponse)
-		if err != nil {
-			log.Print(err)
-			_, err := w.Write([]byte("Error JSON parsing"))
-			if err != nil {
-				return
-			}
+		var streamJsonResponse = getStreamAndErrorHandler(channelId, w)
+		log.Println(streamJsonResponse)
+		if streamJsonResponse.Errors != nil && streamJsonResponse.Errors[0].Code == "invalid_access_token" {
+			log.Println("access token denied. Try refreshing")
+			getWriteAndSetAccessToken()
+			streamJsonResponse = getStreamAndErrorHandler(channelId, w)
 			return
 		}
 		linkUrl = streamJsonResponse.Data.Url
